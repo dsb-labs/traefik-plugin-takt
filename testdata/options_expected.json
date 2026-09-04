@@ -1,0 +1,28 @@
+{
+  "http": {
+    "routers": {
+      "web": {
+        "entryPoints": ["https", "http"],
+        "middlewares": ["gzip", "api-strip"],
+        "rule": "Host(`web.lab.dsb.dev`)",
+        "priority": 42,
+        "service": "web",
+        "tls": {}
+      }
+    },
+    "middlewares": {
+      "gzip": { "compress": {} },
+      "api-strip": { "stripPrefix": { "prefixes": ["/api"] } }
+    },
+    "services": {
+      "web": {
+        "loadBalancer": {
+          "servers": [{ "url": "https://10.0.0.5:20020" }],
+          "passHostHeader": false
+        }
+      }
+    }
+  },
+  "tcp": {},
+  "udp": {}
+}

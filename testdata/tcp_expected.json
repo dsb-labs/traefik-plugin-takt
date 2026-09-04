@@ -1,0 +1,21 @@
+{
+  "http": {},
+  "tcp": {
+    "routers": {
+      "postgres": {
+        "entryPoints": ["postgres"],
+        "rule": "HostSNI(`*`)",
+        "service": "postgres",
+        "tls": { "passthrough": true }
+      }
+    },
+    "services": {
+      "postgres": {
+        "loadBalancer": {
+          "servers": [{ "address": "10.0.0.5:20005" }]
+        }
+      }
+    }
+  },
+  "udp": {}
+}

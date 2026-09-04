@@ -1,0 +1,15 @@
+{
+  "services": [
+    {
+      "name": "dns",
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.udp.routers.dns.entrypoints": "dns"
+      },
+      "target": { "labels": { "app": "dns" }, "port": 53, "protocol": "udp" },
+      "backends": [
+        { "workload": "dns", "instance": 0, "address": "10.0.0.5:20006" }
+      ]
+    }
+  ]
+}

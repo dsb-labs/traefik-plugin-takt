@@ -1,0 +1,24 @@
+{
+  "services": [
+    {
+      "name": "session",
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.http.routers.session.rule": "Host(`session.lab.dsb.dev`)",
+        "traefik.http.services.session.loadbalancer.sticky.cookie": "true",
+        "traefik.http.services.session.loadbalancer.sticky.cookie.name": "orca_affinity",
+        "traefik.http.services.session.loadbalancer.sticky.cookie.secure": "true",
+        "traefik.http.services.session.loadbalancer.sticky.cookie.httponly": "true",
+        "traefik.http.services.session.loadbalancer.sticky.cookie.samesite": "lax",
+        "traefik.http.services.session.loadbalancer.healthcheck.path": "/healthz",
+        "traefik.http.services.session.loadbalancer.healthcheck.interval": "10s",
+        "traefik.http.services.session.loadbalancer.healthcheck.timeout": "3s"
+      },
+      "target": { "labels": { "app": "session" }, "port": 8080, "protocol": "tcp" },
+      "backends": [
+        { "workload": "session", "instance": 0, "address": "10.0.0.5:20040" },
+        { "workload": "session", "instance": 1, "address": "10.0.0.5:20041" }
+      ]
+    }
+  ]
+}

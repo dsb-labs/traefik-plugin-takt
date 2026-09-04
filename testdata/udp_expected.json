@@ -1,0 +1,19 @@
+{
+  "http": {},
+  "tcp": {},
+  "udp": {
+    "routers": {
+      "dns": {
+        "entryPoints": ["dns"],
+        "service": "dns"
+      }
+    },
+    "services": {
+      "dns": {
+        "loadBalancer": {
+          "servers": [{ "address": "10.0.0.5:20006" }]
+        }
+      }
+    }
+  }
+}

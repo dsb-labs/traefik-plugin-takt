@@ -1,0 +1,25 @@
+{
+  "http": {
+    "routers": {
+      "home-assistant": {
+        "entryPoints": ["https"],
+        "rule": "Host(`ha.lab.dsb.dev`)",
+        "service": "home-assistant",
+        "tls": { "certResolver": "cloudflare" }
+      }
+    },
+    "services": {
+      "home-assistant": {
+        "loadBalancer": {
+          "servers": [
+            { "url": "http://10.0.0.5:20000" },
+            { "url": "http://10.0.0.5:20001" }
+          ],
+          "passHostHeader": null
+        }
+      }
+    }
+  },
+  "tcp": {},
+  "udp": {}
+}

@@ -1,0 +1,37 @@
+{
+  "http": {
+    "routers": {
+      "session": {
+        "rule": "Host(`session.lab.dsb.dev`)",
+        "service": "session"
+      }
+    },
+    "services": {
+      "session": {
+        "loadBalancer": {
+          "sticky": {
+            "cookie": {
+              "name": "orca_affinity",
+              "secure": true,
+              "httpOnly": true,
+              "sameSite": "lax"
+            }
+          },
+          "servers": [
+            { "url": "http://10.0.0.5:20040" },
+            { "url": "http://10.0.0.5:20041" }
+          ],
+          "healthCheck": {
+            "path": "/healthz",
+            "interval": "10s",
+            "timeout": "3s",
+            "followRedirects": null
+          },
+          "passHostHeader": null
+        }
+      }
+    }
+  },
+  "tcp": {},
+  "udp": {}
+}

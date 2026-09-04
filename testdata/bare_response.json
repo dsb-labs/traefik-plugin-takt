@@ -1,0 +1,14 @@
+{
+  "services": [
+    {
+      "name": "api",
+      "labels": {
+        "traefik.enable": "true"
+      },
+      "target": { "labels": { "app": "api" }, "port": 8080, "protocol": "tcp" },
+      "backends": [
+        { "workload": "api", "instance": 0, "address": "10.0.0.5:20010" }
+      ]
+    }
+  ]
+}

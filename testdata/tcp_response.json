@@ -1,0 +1,17 @@
+{
+  "services": [
+    {
+      "name": "postgres",
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.tcp.routers.postgres.rule": "HostSNI(`*`)",
+        "traefik.tcp.routers.postgres.entrypoints": "postgres",
+        "traefik.tcp.routers.postgres.tls.passthrough": "true"
+      },
+      "target": { "labels": { "app": "postgres" }, "port": 5432, "protocol": "tcp" },
+      "backends": [
+        { "workload": "postgres", "instance": 0, "address": "10.0.0.5:20005" }
+      ]
+    }
+  ]
+}

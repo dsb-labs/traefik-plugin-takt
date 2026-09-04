@@ -1,0 +1,20 @@
+{
+  "http": {
+    "routers": {
+      "app": {
+        "rule": "Host(`app.lab.dsb.dev`)",
+        "service": "app"
+      }
+    },
+    "services": {
+      "app": {
+        "loadBalancer": {
+          "servers": [{ "url": "http://10.0.0.5:20030" }],
+          "passHostHeader": null
+        }
+      }
+    }
+  },
+  "tcp": {},
+  "udp": {}
+}

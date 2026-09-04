@@ -1,0 +1,23 @@
+{
+  "services": [
+    {
+      "name": "web",
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.http.routers.web.rule": "Host(`web.lab.dsb.dev`)",
+        "traefik.http.routers.web.entrypoints": "https,http",
+        "traefik.http.routers.web.middlewares": "gzip,api-strip",
+        "traefik.http.routers.web.priority": "42",
+        "traefik.http.routers.web.tls": "true",
+        "traefik.http.middlewares.gzip.compress": "true",
+        "traefik.http.middlewares.api-strip.stripprefix.prefixes": "/api",
+        "traefik.http.services.web.loadbalancer.server.scheme": "https",
+        "traefik.http.services.web.loadbalancer.passhostheader": "false"
+      },
+      "target": { "labels": { "app": "web" }, "port": 8443, "protocol": "tcp" },
+      "backends": [
+        { "workload": "web", "instance": 0, "address": "10.0.0.5:20020" }
+      ]
+    }
+  ]
+}

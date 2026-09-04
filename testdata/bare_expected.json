@@ -1,0 +1,14 @@
+{
+  "http": {
+    "services": {
+      "api": {
+        "loadBalancer": {
+          "servers": [{ "url": "http://10.0.0.5:20010" }],
+          "passHostHeader": null
+        }
+      }
+    }
+  },
+  "tcp": {},
+  "udp": {}
+}
