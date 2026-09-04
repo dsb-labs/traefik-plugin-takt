@@ -1,0 +1,15 @@
+# github.com/stretchr/testify v1.12.1
+## explicit; go 1.17
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/assert/yaml
+github.com/stretchr/testify/internal/difflib
+github.com/stretchr/testify/internal/spew
+github.com/stretchr/testify/require
+# github.com/traefik/genconf v0.5.2
+## explicit; go 1.19
+github.com/traefik/genconf/dynamic
+github.com/traefik/genconf/dynamic/tls
+github.com/traefik/genconf/dynamic/types
+# go.yaml.in/yaml/v3 v3.0.5
+## explicit; go 1.16
+go.yaml.in/yaml/v3
