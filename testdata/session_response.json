@@ -6,7 +6,7 @@
         "traefik.enable": "true",
         "traefik.http.routers.session.rule": "Host(`session.lab.dsb.dev`)",
         "traefik.http.services.session.loadbalancer.sticky.cookie": "true",
-        "traefik.http.services.session.loadbalancer.sticky.cookie.name": "orca_affinity",
+        "traefik.http.services.session.loadbalancer.sticky.cookie.name": "takt_affinity",
         "traefik.http.services.session.loadbalancer.sticky.cookie.secure": "true",
         "traefik.http.services.session.loadbalancer.sticky.cookie.httponly": "true",
         "traefik.http.services.session.loadbalancer.sticky.cookie.samesite": "lax",

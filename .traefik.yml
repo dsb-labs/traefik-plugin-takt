@@ -1,8 +1,8 @@
-displayName: Orca
+displayName: Takt
 type: provider
-import: github.com/dsb-labs/traefik-plugin-orca
-basePkg: orca
-summary: Routes traffic to the workload instances an orca server manages.
+import: github.com/dsb-labs/traefik-plugin-takt
+basePkg: takt
+summary: Routes traffic to the workload instances a takt server manages.
 testData:
   endpoint: http://127.0.0.1:7373
   pollInterval: 5s

@@ -1,17 +1,17 @@
-// Package orca provides a traefik provider plugin that publishes the
-// services an orca server holds as traefik dynamic configuration.
+// Package takt provides a traefik provider plugin that publishes the
+// services a takt server holds as traefik dynamic configuration.
 //
-// The plugin polls the orca API for services labelled "traefik.enable=true"
+// The plugin polls the takt API for services labelled "traefik.enable=true"
 // and turns each into routers and a load-balanced service, with the backend
-// addresses orca resolved for the healthy workload instances. Router
-// configuration is read from the orca service's labels, following the same
+// addresses takt resolved for the healthy workload instances. Router
+// configuration is read from the takt service's labels, following the same
 // convention as traefik's docker provider: "traefik.http.routers.<name>.rule"
 // and friends.
 //
 // Traefik interprets this package with yaegi, which is why it talks to the
-// orca API with plain HTTP against vendored configuration types rather than
-// through orca's client package.
-package orca
+// takt API with plain HTTP against vendored configuration types rather than
+// through takt's client package.
+package takt
 
 import (
 	"bytes"
@@ -31,13 +31,13 @@ type (
 	// The Config type contains the fields traefik decodes from the plugin's
 	// static configuration.
 	Config struct {
-		// The base URL of the orca API.
+		// The base URL of the takt API.
 		Endpoint string `json:"endpoint,omitempty"`
 		// How often to read the services, as a Go duration string.
 		PollInterval string `json:"pollInterval,omitempty"`
 	}
 
-	// The Provider type polls an orca server for its services and publishes
+	// The Provider type polls a takt server for its services and publishes
 	// them as traefik dynamic configuration.
 	Provider struct {
 		endpoint string
@@ -57,7 +57,7 @@ func CreateConfig() *Config {
 	}
 }
 
-// New returns a Provider that reads services from the orca server the
+// New returns a Provider that reads services from the takt server the
 // configuration names. Traefik calls it once at startup.
 func New(_ context.Context, config *Config, name string) (*Provider, error) {
 	interval, err := time.ParseDuration(config.PollInterval)
@@ -94,7 +94,7 @@ func (p *Provider) Init() error {
 }
 
 // Provide publishes a dynamic configuration on the channel whenever the
-// services read from orca produce one that differs from the last published.
+// services read from takt produce one that differs from the last published.
 // Traefik owns the channel, and ends the polling through Stop.
 func (p *Provider) Provide(cfgChan chan<- json.Marshaler) error {
 	go p.poll(cfgChan)

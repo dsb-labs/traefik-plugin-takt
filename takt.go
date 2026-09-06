@@ -1,4 +1,4 @@
-package orca
+package takt
 
 import (
 	"context"
@@ -14,35 +14,35 @@ import (
 const enableQuery = `$.labels."traefik.enable"=true`
 
 type (
-	// The orcaService type is the slice of the orca API's service resource the
+	// The taktService type is the slice of the takt API's service resource the
 	// plugin reads: the name, the labels carrying the traefik configuration,
 	// the target's protocol, and the resolved backend addresses.
-	orcaService struct {
+	taktService struct {
 		// The name that identifies the service.
 		Name string `json:"name"`
 		// Key-value pairs attached to the service.
 		Labels map[string]string `json:"labels"`
 		// Which workload instances the service selects.
-		Target orcaTarget `json:"target"`
+		Target taktTarget `json:"target"`
 		// The selected instances that are fit to serve.
-		Backends []orcaBackend `json:"backends"`
+		Backends []taktBackend `json:"backends"`
 	}
 
-	// The orcaTarget type is the part of a service's target the plugin reads.
-	orcaTarget struct {
+	// The taktTarget type is the part of a service's target the plugin reads.
+	taktTarget struct {
 		// The transport protocol of the target port. Empty means tcp.
 		Protocol string `json:"protocol"`
 	}
 
-	// The orcaBackend type is one address a service balances requests across.
-	orcaBackend struct {
+	// The taktBackend type is one address a service balances requests across.
+	taktBackend struct {
 		// The host address that reaches the instance, as "host:port".
 		Address string `json:"address"`
 	}
 )
 
-// fetchServices reads the opted-in services from the orca server.
-func (p *Provider) fetchServices(ctx context.Context) ([]orcaService, error) {
+// fetchServices reads the opted-in services from the takt server.
+func (p *Provider) fetchServices(ctx context.Context) ([]taktService, error) {
 	target := p.endpoint + "/api/v1/services?query=" + url.QueryEscape(enableQuery)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
@@ -61,7 +61,7 @@ func (p *Provider) fetchServices(ctx context.Context) ([]orcaService, error) {
 	}
 
 	var result struct {
-		Services []orcaService `json:"services"`
+		Services []taktService `json:"services"`
 	}
 	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode the response: %w", err)

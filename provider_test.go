@@ -1,4 +1,4 @@
-package orca_test
+package takt_test
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	orca "github.com/dsb-labs/traefik-plugin-orca"
+	takt "github.com/dsb-labs/traefik-plugin-takt"
 )
 
 func TestNew(t *testing.T) {
@@ -21,33 +21,33 @@ func TestNew(t *testing.T) {
 
 	tt := []struct {
 		Name         string
-		Config       orca.Config
+		Config       takt.Config
 		ExpectsError bool
 	}{
 		{
 			Name:   "valid",
-			Config: orca.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s"},
+			Config: takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s"},
 		},
 		{
 			Name:         "unparseable interval",
-			Config:       orca.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "soon"},
+			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "soon"},
 			ExpectsError: true,
 		},
 		{
 			Name:         "zero interval",
-			Config:       orca.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "0s"},
+			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "0s"},
 			ExpectsError: true,
 		},
 		{
 			Name:         "endpoint without a scheme",
-			Config:       orca.Config{Endpoint: "127.0.0.1:7373", PollInterval: "5s"},
+			Config:       takt.Config{Endpoint: "127.0.0.1:7373", PollInterval: "5s"},
 			ExpectsError: true,
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.Name, func(t *testing.T) {
-			provider, err := orca.New(t.Context(), &tc.Config, "orca")
+			provider, err := takt.New(t.Context(), &tc.Config, "takt")
 			if tc.ExpectsError {
 				assert.Error(t, err)
 				return
@@ -156,7 +156,7 @@ func startProvider(t *testing.T, handler http.HandlerFunc) chan json.Marshaler {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	provider, err := orca.New(t.Context(), &orca.Config{Endpoint: server.URL, PollInterval: "10ms"}, "orca")
+	provider, err := takt.New(t.Context(), &takt.Config{Endpoint: server.URL, PollInterval: "10ms"}, "takt")
 	require.NoError(t, err)
 	require.NoError(t, provider.Init())
 

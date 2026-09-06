@@ -1,16 +1,16 @@
-# traefik-plugin-orca
+# traefik-plugin-takt
 
 A [traefik](https://traefik.io) provider plugin that publishes the services an
-[orca](https://github.com/dsb-labs/orca) server holds as traefik dynamic
+[takt](https://github.com/dsb-labs/takt) server holds as traefik dynamic
 configuration. Traefik then balances requests across the healthy workload
 instances each service selects, and follows the fleet as instances scale, fail
 their checks, or move ports.
 
-The plugin polls the orca API for services labelled `traefik.enable=true`. Each
+The plugin polls the takt API for services labelled `traefik.enable=true`. Each
 one becomes a load-balanced traefik service whose servers are the addresses
-orca reports as
-[backends](https://github.com/dsb-labs/orca/blob/main/docs/services.md#backends).
-Routers are read from the orca service's labels, following the same convention
+takt reports as
+[backends](https://github.com/dsb-labs/takt/blob/main/docs/services.md#backends).
+Routers are read from the takt service's labels, following the same convention
 as traefik's docker provider. A configuration is pushed to traefik only when it
 differs from the last one pushed.
 
@@ -22,25 +22,25 @@ downloads the tagged source and interprets it at startup:
 ```yaml
 experimental:
   plugins:
-    orca:
-      moduleName: github.com/dsb-labs/traefik-plugin-orca
+    takt:
+      moduleName: github.com/dsb-labs/traefik-plugin-takt
       version: v0.1.0
 
 providers:
   plugin:
-    orca:
+    takt:
       endpoint: http://127.0.0.1:7373
       pollInterval: 5s
 ```
 
 To run an unreleased checkout instead, use traefik's
 [local plugin](https://plugins.traefik.io/create) mode. Place this repository
-at `plugins-local/src/github.com/dsb-labs/traefik-plugin-orca`, relative to
+at `plugins-local/src/github.com/dsb-labs/traefik-plugin-takt`, relative to
 where traefik runs. A symlink works:
 
 ```sh
 mkdir -p plugins-local/src/github.com/dsb-labs
-ln -s /path/to/traefik-plugin-orca plugins-local/src/github.com/dsb-labs/traefik-plugin-orca
+ln -s /path/to/traefik-plugin-takt plugins-local/src/github.com/dsb-labs/traefik-plugin-takt
 ```
 
 Then declare it under `localPlugins` in place of `plugins`, with the same
@@ -48,7 +48,7 @@ Then declare it under `localPlugins` in place of `plugins`, with the same
 
 | Option | Default | Description |
 |---|---|---|
-| `endpoint` | `http://127.0.0.1:7373` | The base URL of the orca API. |
+| `endpoint` | `http://127.0.0.1:7373` | The base URL of the takt API. |
 | `pollInterval` | `5s` | How often to read the services, as a Go duration. |
 
 ## Labelling a service
@@ -70,7 +70,7 @@ target:
   port: 8123
 ```
 
-The traefik service is always generated, named after the orca service. A router
+The traefik service is always generated, named after the takt service. A router
 that names no `service` refers to it. A router's name must not contain dots,
 because a dot in a label key separates path segments.
 
@@ -88,11 +88,11 @@ docker provider treats `traefik.http.routers.<name>.tls=true` or
 
 Some limits apply:
 
-- Orca refuses label keys over 63 characters, which a deep path such as
+- Takt refuses label keys over 63 characters, which a deep path such as
   `...loadbalancer.sticky.cookie.httponly` exceeds. Keep names short.
 - The `traefik.http.services.<name>.loadbalancer.server.` labels are refused,
   except `server.scheme` on the service's own name, which sets the scheme
-  backend URLs are written with. The other server fields describe what orca
+  backend URLs are written with. The other server fields describe what takt
   already provides.
 - The configuration types lag traefik itself a little. The affinity cookie
   has no `maxage`, `path` or `domain`, the health check has no `status`, and
@@ -104,7 +104,7 @@ Some limits apply:
 
 ## Protocols
 
-The orca target's protocol picks the traefik section:
+The takt target's protocol picks the traefik section:
 
 - A `tcp` target fills the HTTP section, with backends written as
   `http://host:port` URLs. When the labels declare `traefik.tcp.routers.`
@@ -113,20 +113,20 @@ The orca target's protocol picks the traefik section:
 
 An opted-in service with no router labels still produces the generated traefik
 service. A router held by another provider can reference it as
-`<name>@plugin-orca`.
+`<name>@plugin-takt`.
 
 ## Behaviour to know
 
-- Backends are the instances orca reports fit to serve, so an instance that
+- Backends are the instances takt reports fit to serve, so an instance that
   fails its health check leaves the rotation on the next poll.
 - A service with no backends produces a traefik service with no servers.
   Its routers stay defined and traefik answers 503 until backends arrive.
-- A failed poll keeps the last configuration, so a briefly unreachable orca
+- A failed poll keeps the last configuration, so a briefly unreachable takt
   server does not empty traefik's routing table.
-- Sticky sessions pin a client to a backend URL. Orca reallocates host ports
+- Sticky sessions pin a client to a backend URL. Takt reallocates host ports
   when it replaces an instance, so the cookie stops matching and traefik
   re-balances that client on its next request.
-- The `healthcheck` labels run traefik's own probe on top of orca's health
-  check. Orca's check gates which backends are reported at each poll, while
+- The `healthcheck` labels run traefik's own probe on top of takt's health
+  check. Takt's check gates which backends are reported at each poll, while
   traefik's reacts between polls and sees failures on traefik's own network
   path.

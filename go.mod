@@ -1,4 +1,4 @@
-module github.com/dsb-labs/traefik-plugin-orca
+module github.com/dsb-labs/traefik-plugin-takt
 
 go 1.24
 

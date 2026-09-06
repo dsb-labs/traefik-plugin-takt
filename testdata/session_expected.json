@@ -11,7 +11,7 @@
         "loadBalancer": {
           "sticky": {
             "cookie": {
-              "name": "orca_affinity",
+              "name": "takt_affinity",
               "secure": true,
               "httpOnly": true,
               "sameSite": "lax"

@@ -1,4 +1,4 @@
-package orca
+package takt
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 	"github.com/traefik/genconf/dynamic"
 )
 
-// buildConfiguration maps the orca services onto one dynamic configuration.
-func (p *Provider) buildConfiguration(services []orcaService) *dynamic.Configuration {
+// buildConfiguration maps the takt services onto one dynamic configuration.
+func (p *Provider) buildConfiguration(services []taktService) *dynamic.Configuration {
 	cfg := &dynamic.Configuration{
 		HTTP: &dynamic.HTTPConfiguration{
 			Routers:           map[string]*dynamic.Router{},
@@ -37,7 +37,7 @@ func (p *Provider) buildConfiguration(services []orcaService) *dynamic.Configura
 	return cfg
 }
 
-// applyService decodes one orca service's labels and adds what they declare,
+// applyService decodes one takt service's labels and adds what they declare,
 // together with the generated traefik service, to the configuration.
 //
 // The labels follow the docker provider's convention and are decoded against
@@ -50,7 +50,7 @@ func (p *Provider) buildConfiguration(services []orcaService) *dynamic.Configura
 // unless the labels declare TCP routers, which fill the TCP section instead.
 // A tcp target with no routers at all still generates an HTTP service, so a
 // router held by another provider can reference it.
-func (p *Provider) applyService(cfg *dynamic.Configuration, svc orcaService) {
+func (p *Provider) applyService(cfg *dynamic.Configuration, svc taktService) {
 	logger := p.logger.With("service", svc.Name)
 	scheme, labels := splitScheme(logger, svc)
 
@@ -138,7 +138,7 @@ func (p *Provider) applyService(cfg *dynamic.Configuration, svc orcaService) {
 // "loadbalancer.server" entries. The configuration types hold no per-server
 // scheme, so the plugin reads the service's own scheme label itself and
 // refuses the rest rather than misreading them.
-func splitScheme(logger *slog.Logger, svc orcaService) (string, map[string]string) {
+func splitScheme(logger *slog.Logger, svc taktService) (string, map[string]string) {
 	scheme := "http"
 	labels := make(map[string]string, len(svc.Labels))
 
