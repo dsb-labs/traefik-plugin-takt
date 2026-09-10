@@ -50,6 +50,40 @@ Then declare it under `localPlugins` in place of `plugins`, with the same
 |---|---|---|
 | `endpoint` | `http://127.0.0.1:7373` | The base URL of the takt API. |
 | `pollInterval` | `5s` | How often to read the services, as a Go duration. |
+| `token` | empty | A bearer token presented on every poll, for a takt server with authentication enabled. |
+| `tokenFile` | empty | A file holding the bearer token, read fresh on every poll. Set this or `token`, not both. |
+
+## Authentication
+
+A takt server with [authentication](https://github.com/dsb-labs/takt/blob/main/docs/acl.md)
+enabled refuses an unauthenticated poll. Reading services needs the `viewer`
+role, so create a token for the plugin's principal and grant it `viewer`:
+
+```sh
+takt token create traefik
+```
+
+The plugin presents the token as a bearer credential. Two ways to give it
+one:
+
+- `token` puts the value straight in the static configuration. Simple, but the
+  token then lives in the configuration file.
+- `tokenFile` names a file the plugin reads on every poll. The token stays out
+  of the configuration, and rotating the file is picked up without restarting
+  traefik. This is the one to prefer when the token is a mounted secret — takt
+  can [mount a secret as a file](https://github.com/dsb-labs/takt/blob/main/docs/secrets.md#mounting-a-secret-as-a-file)
+  and signal the workload on rotation.
+
+```yaml
+providers:
+  plugin:
+    takt:
+      endpoint: https://takt.example.com
+      tokenFile: /etc/traefik/takt-token
+```
+
+Without authentication enabled on the server, leave both unset — an anonymous
+poll is accepted.
 
 ## Labelling a service
 
