@@ -35,16 +35,27 @@ type (
 		Endpoint string `json:"endpoint,omitempty"`
 		// How often to read the services, as a Go duration string.
 		PollInterval string `json:"pollInterval,omitempty"`
+		// The bearer token the plugin presents, for a takt server with
+		// authentication enabled. Empty presents no credential. Prefer
+		// tokenFile, which keeps the token out of the static configuration
+		// and picks up a rotation without a restart.
+		Token string `json:"token,omitempty"`
+		// The path to a file holding the bearer token, read fresh on every
+		// poll so a rotated token is picked up without restarting traefik.
+		// Set this or token, not both.
+		TokenFile string `json:"tokenFile,omitempty"`
 	}
 
 	// The Provider type polls a takt server for its services and publishes
 	// them as traefik dynamic configuration.
 	Provider struct {
-		endpoint string
-		interval time.Duration
-		client   *http.Client
-		logger   *slog.Logger
-		done     chan struct{}
+		endpoint  string
+		interval  time.Duration
+		token     string
+		tokenFile string
+		client    *http.Client
+		logger    *slog.Logger
+		done      chan struct{}
 	}
 )
 
@@ -78,13 +89,44 @@ func New(_ context.Context, config *Config, name string) (*Provider, error) {
 		return nil, fmt.Errorf("the endpoint %q is not an http or https URL", config.Endpoint)
 	}
 
+	if config.Token != "" && config.TokenFile != "" {
+		return nil, errors.New("set only one of token and tokenFile")
+	}
+
+	// Read once here so a missing or unreadable file stops traefik at
+	// startup rather than turning every poll into a 401.
+	if config.TokenFile != "" {
+		if _, err = os.ReadFile(config.TokenFile); err != nil {
+			return nil, fmt.Errorf("failed to read the token file: %w", err)
+		}
+	}
+
 	return &Provider{
-		endpoint: strings.TrimSuffix(endpoint.String(), "/"),
-		interval: interval,
-		client:   &http.Client{},
-		logger:   slog.New(slog.NewTextHandler(os.Stdout, nil)).With("plugin", name),
-		done:     make(chan struct{}),
+		endpoint:  strings.TrimSuffix(endpoint.String(), "/"),
+		interval:  interval,
+		token:     config.Token,
+		tokenFile: config.TokenFile,
+		client:    &http.Client{},
+		logger:    slog.New(slog.NewTextHandler(os.Stdout, nil)).With("plugin", name),
+		done:      make(chan struct{}),
 	}, nil
+}
+
+// authorization returns the bearer token the plugin presents. It reads the
+// token file on each call, so a rotated token is picked up without a
+// restart, and falls back to the static token, or to empty when neither is
+// configured.
+func (p *Provider) authorization() (string, error) {
+	if p.tokenFile == "" {
+		return p.token, nil
+	}
+
+	data, err := os.ReadFile(p.tokenFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read the token file: %w", err)
+	}
+
+	return strings.TrimSpace(string(data)), nil
 }
 
 // Init reports whether the provider is ready to run. The configuration was

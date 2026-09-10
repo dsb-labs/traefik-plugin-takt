@@ -43,6 +43,20 @@ func TestNew(t *testing.T) {
 			Config:       takt.Config{Endpoint: "127.0.0.1:7373", PollInterval: "5s"},
 			ExpectsError: true,
 		},
+		{
+			Name:   "an inline token",
+			Config: takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s", Token: "takt_c_secret"},
+		},
+		{
+			Name:         "both token and token file",
+			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s", Token: "takt_c_secret", TokenFile: "/tmp/token"},
+			ExpectsError: true,
+		},
+		{
+			Name:         "an unreadable token file",
+			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s", TokenFile: "/does/not/exist"},
+			ExpectsError: true,
+		},
 	}
 
 	for _, tc := range tt {
@@ -144,6 +158,89 @@ func TestProvider_Provide(t *testing.T) {
 		expected, err := os.ReadFile(filepath.Join("testdata", "bare_expected.json"))
 		require.NoError(t, err)
 		assert.JSONEq(t, string(expected), string(actual))
+	})
+}
+
+func TestProvider_Authorization(t *testing.T) {
+	t.Parallel()
+
+	response, err := os.ReadFile(filepath.Join("testdata", "bare_response.json"))
+	require.NoError(t, err)
+
+	// The handler records the Authorization header of the most recent poll,
+	// so a test can assert what the provider presented, and see a rotation
+	// once the provider reads it.
+	serve := func(t *testing.T, seen *atomic.Pointer[string]) *httptest.Server {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			header := r.Header.Get("Authorization")
+			seen.Store(&header)
+			w.Write(response)
+		}))
+		t.Cleanup(server.Close)
+
+		return server
+	}
+
+	t.Run("presents an inline token as a bearer credential", func(t *testing.T) {
+		var seen atomic.Pointer[string]
+		server := serve(t, &seen)
+
+		provider, err := takt.New(t.Context(),
+			&takt.Config{Endpoint: server.URL, PollInterval: "10ms", Token: "takt_c_secret"}, "takt")
+		require.NoError(t, err)
+		require.NoError(t, provider.Init())
+		require.NoError(t, provider.Provide(make(chan json.Marshaler, 16)))
+		t.Cleanup(func() { assert.NoError(t, provider.Stop()) })
+
+		assert.Eventually(t, func() bool {
+			header := seen.Load()
+			return header != nil && *header == "Bearer takt_c_secret"
+		}, 10*time.Second, 10*time.Millisecond)
+	})
+
+	t.Run("presents no credential when none is configured", func(t *testing.T) {
+		var seen atomic.Pointer[string]
+		server := serve(t, &seen)
+
+		provider, err := takt.New(t.Context(), &takt.Config{Endpoint: server.URL, PollInterval: "10ms"}, "takt")
+		require.NoError(t, err)
+		require.NoError(t, provider.Init())
+		require.NoError(t, provider.Provide(make(chan json.Marshaler, 16)))
+		t.Cleanup(func() { assert.NoError(t, provider.Stop()) })
+
+		assert.Eventually(t, func() bool {
+			header := seen.Load()
+			return header != nil && *header == ""
+		}, 10*time.Second, 10*time.Millisecond)
+	})
+
+	t.Run("reads the token from a file, freshly on each poll", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "token")
+		require.NoError(t, os.WriteFile(path, []byte("takt_c_one\n"), 0o600))
+
+		var seen atomic.Pointer[string]
+		server := serve(t, &seen)
+
+		provider, err := takt.New(t.Context(),
+			&takt.Config{Endpoint: server.URL, PollInterval: "10ms", TokenFile: path}, "takt")
+		require.NoError(t, err)
+		require.NoError(t, provider.Init())
+		require.NoError(t, provider.Provide(make(chan json.Marshaler, 16)))
+		t.Cleanup(func() { assert.NoError(t, provider.Stop()) })
+
+		assert.Eventually(t, func() bool {
+			header := seen.Load()
+			return header != nil && *header == "Bearer takt_c_one"
+		}, 10*time.Second, 10*time.Millisecond)
+
+		// Rotating the file is picked up without a restart, because the token
+		// is read on each poll.
+		require.NoError(t, os.WriteFile(path, []byte("takt_c_two\n"), 0o600))
+
+		assert.Eventually(t, func() bool {
+			header := seen.Load()
+			return header != nil && *header == "Bearer takt_c_two"
+		}, 10*time.Second, 10*time.Millisecond)
 	})
 }
 
