@@ -50,6 +50,15 @@ func (p *Provider) fetchServices(ctx context.Context) ([]taktService, error) {
 		return nil, fmt.Errorf("failed to create the request: %w", err)
 	}
 
+	token, err := p.authorization()
+	if err != nil {
+		return nil, err
+	}
+
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send the request: %w", err)
