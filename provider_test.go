@@ -26,35 +26,35 @@ func TestNew(t *testing.T) {
 	}{
 		{
 			Name:   "valid",
-			Config: takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s"},
+			Config: takt.Config{Endpoint: "http://127.0.0.1:7373", RetryInterval: "5s"},
 		},
 		{
 			Name:         "unparseable interval",
-			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "soon"},
+			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", RetryInterval: "soon"},
 			ExpectsError: true,
 		},
 		{
 			Name:         "zero interval",
-			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "0s"},
+			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", RetryInterval: "0s"},
 			ExpectsError: true,
 		},
 		{
 			Name:         "endpoint without a scheme",
-			Config:       takt.Config{Endpoint: "127.0.0.1:7373", PollInterval: "5s"},
+			Config:       takt.Config{Endpoint: "127.0.0.1:7373", RetryInterval: "5s"},
 			ExpectsError: true,
 		},
 		{
 			Name:   "an inline token",
-			Config: takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s", Token: "takt_c_secret"},
+			Config: takt.Config{Endpoint: "http://127.0.0.1:7373", RetryInterval: "5s", Token: "takt_c_secret"},
 		},
 		{
 			Name:         "both token and token file",
-			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s", Token: "takt_c_secret", TokenFile: "/tmp/token"},
+			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", RetryInterval: "5s", Token: "takt_c_secret", TokenFile: "/tmp/token"},
 			ExpectsError: true,
 		},
 		{
 			Name:         "an unreadable token file",
-			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", PollInterval: "5s", TokenFile: "/does/not/exist"},
+			Config:       takt.Config{Endpoint: "http://127.0.0.1:7373", RetryInterval: "5s", TokenFile: "/does/not/exist"},
 			ExpectsError: true,
 		},
 	}
@@ -97,6 +97,7 @@ func TestProvider_Provide(t *testing.T) {
 			require.NoError(t, err)
 
 			cfgChan := startProvider(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "true", r.URL.Query().Get("follow"))
 				assert.Equal(t, `$.labels."traefik.enable"=true`, r.URL.Query().Get("query"))
 				w.Write(response)
 			})
@@ -107,15 +108,50 @@ func TestProvider_Provide(t *testing.T) {
 		})
 	}
 
+	t.Run("each set the stream writes is published", func(t *testing.T) {
+		first, err := os.ReadFile(filepath.Join("testdata", "bare_response.json"))
+		require.NoError(t, err)
+		second, err := os.ReadFile(filepath.Join("testdata", "http_response.json"))
+		require.NoError(t, err)
+
+		// One connection carries both sets, then stays open until the provider
+		// stops, so a second configuration can only have come from the stream.
+		var streams atomic.Int64
+		cfgChan := startProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			streams.Add(1)
+			w.Write(first)
+			w.(http.Flusher).Flush()
+			w.Write(second)
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+		})
+
+		one, err := json.Marshal(receive(t, cfgChan))
+		require.NoError(t, err)
+		two, err := json.Marshal(receive(t, cfgChan))
+		require.NoError(t, err)
+
+		expectedFirst, err := os.ReadFile(filepath.Join("testdata", "bare_expected.json"))
+		require.NoError(t, err)
+		expectedSecond, err := os.ReadFile(filepath.Join("testdata", "http_expected.json"))
+		require.NoError(t, err)
+
+		assert.JSONEq(t, string(expectedFirst), string(one))
+		assert.JSONEq(t, string(expectedSecond), string(two))
+		assert.Equal(t, int64(1), streams.Load())
+	})
+
 	t.Run("an unchanged configuration is not resent", func(t *testing.T) {
 		first, err := os.ReadFile(filepath.Join("testdata", "bare_response.json"))
 		require.NoError(t, err)
 		second, err := os.ReadFile(filepath.Join("testdata", "http_response.json"))
 		require.NoError(t, err)
 
-		var polls atomic.Int64
+		// Each stream ends after one set, so the provider reopens it after
+		// the retry interval, and a set that matches the last is not resent.
+		var streams atomic.Int64
 		cfgChan := startProvider(t, func(w http.ResponseWriter, r *http.Request) {
-			if polls.Add(1) <= 2 {
+			if streams.Add(1) <= 2 {
 				w.Write(first)
 				return
 			}
@@ -135,16 +171,16 @@ func TestProvider_Provide(t *testing.T) {
 
 		assert.JSONEq(t, string(expectedFirst), string(one))
 		assert.JSONEq(t, string(expectedSecond), string(two))
-		assert.GreaterOrEqual(t, polls.Load(), int64(3))
+		assert.GreaterOrEqual(t, streams.Load(), int64(3))
 	})
 
-	t.Run("a failed read keeps the polling alive", func(t *testing.T) {
+	t.Run("a refused stream is reopened", func(t *testing.T) {
 		response, err := os.ReadFile(filepath.Join("testdata", "bare_response.json"))
 		require.NoError(t, err)
 
-		var polls atomic.Int64
+		var streams atomic.Int64
 		cfgChan := startProvider(t, func(w http.ResponseWriter, r *http.Request) {
-			if polls.Add(1) == 1 {
+			if streams.Add(1) == 1 {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -167,9 +203,10 @@ func TestProvider_Authorization(t *testing.T) {
 	response, err := os.ReadFile(filepath.Join("testdata", "bare_response.json"))
 	require.NoError(t, err)
 
-	// The handler records the Authorization header of the most recent poll,
+	// The handler records the Authorization header of the most recent stream,
 	// so a test can assert what the provider presented, and see a rotation
-	// once the provider reads it.
+	// once the provider reads it. Each stream ends at once, so the provider
+	// keeps reopening it.
 	serve := func(t *testing.T, seen *atomic.Pointer[string]) *httptest.Server {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
@@ -186,7 +223,7 @@ func TestProvider_Authorization(t *testing.T) {
 		server := serve(t, &seen)
 
 		provider, err := takt.New(t.Context(),
-			&takt.Config{Endpoint: server.URL, PollInterval: "10ms", Token: "takt_c_secret"}, "takt")
+			&takt.Config{Endpoint: server.URL, RetryInterval: "10ms", Token: "takt_c_secret"}, "takt")
 		require.NoError(t, err)
 		require.NoError(t, provider.Init())
 		require.NoError(t, provider.Provide(make(chan json.Marshaler, 16)))
@@ -202,7 +239,7 @@ func TestProvider_Authorization(t *testing.T) {
 		var seen atomic.Pointer[string]
 		server := serve(t, &seen)
 
-		provider, err := takt.New(t.Context(), &takt.Config{Endpoint: server.URL, PollInterval: "10ms"}, "takt")
+		provider, err := takt.New(t.Context(), &takt.Config{Endpoint: server.URL, RetryInterval: "10ms"}, "takt")
 		require.NoError(t, err)
 		require.NoError(t, provider.Init())
 		require.NoError(t, provider.Provide(make(chan json.Marshaler, 16)))
@@ -214,7 +251,7 @@ func TestProvider_Authorization(t *testing.T) {
 		}, 10*time.Second, 10*time.Millisecond)
 	})
 
-	t.Run("reads the token from a file, freshly on each poll", func(t *testing.T) {
+	t.Run("reads the token from a file, freshly on each stream", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "token")
 		require.NoError(t, os.WriteFile(path, []byte("takt_c_one\n"), 0o600))
 
@@ -222,7 +259,7 @@ func TestProvider_Authorization(t *testing.T) {
 		server := serve(t, &seen)
 
 		provider, err := takt.New(t.Context(),
-			&takt.Config{Endpoint: server.URL, PollInterval: "10ms", TokenFile: path}, "takt")
+			&takt.Config{Endpoint: server.URL, RetryInterval: "10ms", TokenFile: path}, "takt")
 		require.NoError(t, err)
 		require.NoError(t, provider.Init())
 		require.NoError(t, provider.Provide(make(chan json.Marshaler, 16)))
@@ -234,7 +271,7 @@ func TestProvider_Authorization(t *testing.T) {
 		}, 10*time.Second, 10*time.Millisecond)
 
 		// Rotating the file is picked up without a restart, because the token
-		// is read on each poll.
+		// is read each time a stream opens.
 		require.NoError(t, os.WriteFile(path, []byte("takt_c_two\n"), 0o600))
 
 		assert.Eventually(t, func() bool {
@@ -244,16 +281,16 @@ func TestProvider_Authorization(t *testing.T) {
 	})
 }
 
-// startProvider runs a Provider polling a test server that answers with the
-// given handler, returning the channel the provider publishes on. The server
-// and the provider are stopped when the test ends.
+// startProvider runs a Provider following a test server that answers with
+// the given handler, returning the channel the provider publishes on. The
+// server and the provider are stopped when the test ends.
 func startProvider(t *testing.T, handler http.HandlerFunc) chan json.Marshaler {
 	t.Helper()
 
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	provider, err := takt.New(t.Context(), &takt.Config{Endpoint: server.URL, PollInterval: "10ms"}, "takt")
+	provider, err := takt.New(t.Context(), &takt.Config{Endpoint: server.URL, RetryInterval: "10ms"}, "takt")
 	require.NoError(t, err)
 	require.NoError(t, provider.Init())
 
