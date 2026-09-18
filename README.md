@@ -6,13 +6,16 @@ configuration. Traefik then balances requests across the healthy workload
 instances each service selects, and follows the fleet as instances scale, fail
 their checks, or move ports.
 
-The plugin polls the takt API for services labelled `traefik.enable=true`. Each
-one becomes a load-balanced traefik service whose servers are the addresses
-takt reports as
+The plugin [follows](https://github.com/dsb-labs/takt/blob/main/docs/services.md#following-the-list)
+the takt API's list of services labelled `traefik.enable=true`, so a change
+reaches traefik as soon as the server notices it. Each one becomes a
+load-balanced traefik service whose servers are the addresses takt reports as
 [backends](https://github.com/dsb-labs/takt/blob/main/docs/services.md#backends).
 Routers are read from the takt service's labels, following the same convention
 as traefik's docker provider. A configuration is pushed to traefik only when it
 differs from the last one pushed.
+
+Following the list needs takt v0.8.0 or later.
 
 ## Installation
 
@@ -30,7 +33,7 @@ providers:
   plugin:
     takt:
       endpoint: http://127.0.0.1:7373
-      pollInterval: 5s
+      retryInterval: 5s
 ```
 
 To run an unreleased checkout instead, use traefik's
@@ -49,14 +52,14 @@ Then declare it under `localPlugins` in place of `plugins`, with the same
 | Option | Default | Description |
 |---|---|---|
 | `endpoint` | `http://127.0.0.1:7373` | The base URL of the takt API. |
-| `pollInterval` | `5s` | How often to read the services, as a Go duration. |
-| `token` | empty | A bearer token presented on every poll, for a takt server with authentication enabled. |
-| `tokenFile` | empty | A file holding the bearer token, read fresh on every poll. Set this or `token`, not both. |
+| `retryInterval` | `5s` | How long to wait before reopening a stream the server ended or refused, as a Go duration. |
+| `token` | empty | A bearer token presented when a stream opens, for a takt server with authentication enabled. |
+| `tokenFile` | empty | A file holding the bearer token, read fresh each time a stream opens. Set this or `token`, not both. |
 
 ## Authentication
 
 A takt server with [authentication](https://github.com/dsb-labs/takt/blob/main/docs/acl.md)
-enabled refuses an unauthenticated poll. Reading services needs the `viewer`
+enabled refuses an unauthenticated stream. Reading services needs the `viewer`
 role, so create a token for the plugin's principal and grant it `viewer`:
 
 ```sh
@@ -68,9 +71,10 @@ one:
 
 - `token` puts the value straight in the static configuration. Simple, but the
   token then lives in the configuration file.
-- `tokenFile` names a file the plugin reads on every poll. The token stays out
-  of the configuration, and rotating the file is picked up without restarting
-  traefik. This is the one to prefer when the token is a mounted secret — takt
+- `tokenFile` names a file the plugin reads each time it opens a stream. The
+  token stays out of the configuration, and rotating the file is picked up on
+  the next reconnect without restarting traefik. This is the one to prefer
+  when the token is a mounted secret — takt
   can [mount a secret as a file](https://github.com/dsb-labs/takt/blob/main/docs/secrets.md#mounting-a-secret-as-a-file)
   and signal the workload on rotation.
 
@@ -83,7 +87,7 @@ providers:
 ```
 
 Without authentication enabled on the server, leave both unset — an anonymous
-poll is accepted.
+stream is accepted.
 
 ## Labelling a service
 
@@ -152,15 +156,17 @@ service. A router held by another provider can reference it as
 ## Behaviour to know
 
 - Backends are the instances takt reports fit to serve, so an instance that
-  fails its health check leaves the rotation on the next poll.
+  fails its health check leaves the rotation as soon as takt's next
+  [reconciliation pass](https://github.com/dsb-labs/takt/blob/main/docs/reconciliation.md#when-a-pass-runs)
+  sees it.
 - A service with no backends produces a traefik service with no servers.
   Its routers stay defined and traefik answers 503 until backends arrive.
-- A failed poll keeps the last configuration, so a briefly unreachable takt
-  server does not empty traefik's routing table.
+- A stream that ends or fails keeps the last configuration, and the plugin
+  reopens it after `retryInterval`, so a briefly unreachable takt server does
+  not empty traefik's routing table.
 - Sticky sessions pin a client to a backend URL. Takt reallocates host ports
   when it replaces an instance, so the cookie stops matching and traefik
   re-balances that client on its next request.
 - The `healthcheck` labels run traefik's own probe on top of takt's health
-  check. Takt's check gates which backends are reported at each poll, while
-  traefik's reacts between polls and sees failures on traefik's own network
-  path.
+  check. Takt's check gates which backends are reported, while traefik's sees
+  failures on traefik's own network path.

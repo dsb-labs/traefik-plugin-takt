@@ -3,14 +3,16 @@ package takt
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 )
 
-// enableQuery is the label filter the plugin sends with every list request,
-// so the server only returns services that opted in with the
-// "traefik.enable=true" label.
+// enableQuery is the label filter the plugin sends with every request, so the
+// server only returns services that opted in with the "traefik.enable=true"
+// label.
 const enableQuery = `$.labels."traefik.enable"=true`
 
 type (
@@ -41,18 +43,21 @@ type (
 	}
 )
 
-// fetchServices reads the opted-in services from the takt server.
-func (p *Provider) fetchServices(ctx context.Context) ([]taktService, error) {
-	target := p.endpoint + "/api/v1/services?query=" + url.QueryEscape(enableQuery)
+// streamServices follows the opted-in services on the takt server, calling fn
+// with the whole set each time the server writes it. The first set arrives at
+// once, and the rest as the backends change. It returns nil when the server
+// ends the stream, and the caller's context error when the caller does.
+func (p *Provider) streamServices(ctx context.Context, fn func([]taktService) error) error {
+	target := p.endpoint + "/api/v1/services?follow=true&query=" + url.QueryEscape(enableQuery)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create the request: %w", err)
+		return fmt.Errorf("failed to create the request: %w", err)
 	}
 
 	token, err := p.authorization()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if token != "" {
@@ -61,20 +66,33 @@ func (p *Provider) fetchServices(ctx context.Context) ([]taktService, error) {
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send the request: %w", err)
+		return fmt.Errorf("failed to send the request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("the server answered with status %d", resp.StatusCode)
+		return fmt.Errorf("the server answered with status %d", resp.StatusCode)
 	}
 
-	var result struct {
-		Services []taktService `json:"services"`
-	}
-	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode the response: %w", err)
-	}
+	// Each line is the whole set, in the shape a plain list answers with.
+	decoder := json.NewDecoder(resp.Body)
+	for {
+		var line struct {
+			Services []taktService `json:"services"`
+		}
 
-	return result.Services, nil
+		err = decoder.Decode(&line)
+		switch {
+		case errors.Is(err, io.EOF):
+			return nil
+		case ctx.Err() != nil:
+			return ctx.Err()
+		case err != nil:
+			return fmt.Errorf("failed to decode the response: %w", err)
+		}
+
+		if err = fn(line.Services); err != nil {
+			return err
+		}
+	}
 }
