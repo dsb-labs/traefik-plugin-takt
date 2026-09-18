@@ -5,4 +5,4 @@ basePkg: takt
 summary: Routes traffic to the workload instances a takt server manages.
 testData:
   endpoint: http://127.0.0.1:7373
-  pollInterval: 5s
+  retryInterval: 5s
